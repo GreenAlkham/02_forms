@@ -3,6 +3,7 @@ package org.example;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URI;
@@ -12,7 +13,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import static java.lang.System.in;
 import static java.lang.System.out;
 
 
@@ -21,9 +21,9 @@ public class Request {
     public static final String GET = "GET";
     public static final String POST = "POST";
 
-    private String method;
-    private String path;
-    private List<String> headers;
+    private static String method;
+    private static String path;
+    private static List<String> headers;
     private List<NameValuePair> parameters;
 
     public Request(String method, String path, List<String> headers, List<NameValuePair> parameters) {
@@ -33,13 +33,12 @@ public class Request {
         this.parameters = parameters;
     }
 
-    public Object Request (String method, String path, List<String> headers, List<NameValuePair> parameters) throws IOException, URISyntaxException {
+    public static Request request(BufferedInputStream in) throws IOException, URISyntaxException {
 
         final var allowedMethods = List.of(GET, POST);
 
         // лимит на request line + заголовки
         final var limit = 4096;
-
 
         in.mark(limit);
         final var buffer = new byte[limit];
@@ -50,20 +49,17 @@ public class Request {
         final var requestLineEnd = indexOf(buffer, requestLineDelimiter, 0, read);
         if (requestLineEnd == -1) {
             badRequest(out);
-            //  continue;
         }
 
         // читаем request line
         final var requestLine = new String(Arrays.copyOf(buffer, requestLineEnd)).split(" ");
         if (requestLine.length != 3) {
             badRequest(out);
-            //continue;
         }
 
         method = requestLine[0];
         if (!allowedMethods.contains(method)) {
             badRequest(out);
-//          continue;
         }
         out.println(method);
 
@@ -79,7 +75,6 @@ public class Request {
         final var headersEnd = indexOf(buffer, headersDelimiter, headersStart, read);
         if (headersEnd == -1) {
             badRequest(out);
-//          continue;
         }
 
         // отматываем на начало буфера
@@ -91,7 +86,7 @@ public class Request {
         headers = Arrays.asList(new String(headersBytes).split("\r\n"));
         out.println(headers);
 
-        List<NameValuePair> params = URLEncodedUtils.parse(new URI(path), StandardCharsets.UTF_8);
+        List<NameValuePair> parameters = URLEncodedUtils.parse(new URI(path), StandardCharsets.UTF_8);
 
         // для GET тела нет
         if (!method.equals(GET)) {
@@ -113,6 +108,7 @@ public class Request {
                         "\r\n"
         ).getBytes());
         out.flush();
+
         return new Request(method, path, headers, parameters);
     }
 
@@ -161,7 +157,7 @@ public class Request {
     }
 
     public NameValuePair getQueryParam(String name, String value) {
-        return getQueryParams().stream()
+        return getQueryParams(parameters).stream()
                 .filter(param -> param.getName().equalsIgnoreCase(name))
                 .findFirst().orElse(new NameValuePair() {
                     public String getName() {
@@ -174,7 +170,7 @@ public class Request {
                 });
     }
 
-    public List<NameValuePair> getQueryParams() {
+    public List<NameValuePair> getQueryParams(List<NameValuePair> parameters) {
         return parameters;
     }
 }

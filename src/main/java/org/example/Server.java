@@ -1,7 +1,6 @@
 package org.example;
 
-import org.apache.http.NameValuePair;
-
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
@@ -13,14 +12,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 
 public class Server {
 
-    private final List<String> validPaths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html",
+    private final List<String> paths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html",
             "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html", "/events.html", "/events.js");
     private final ExecutorService executorService = Executors.newFixedThreadPool(64);
     private final ConcurrentHashMap<String, Map<String, Handler>> handlers;
@@ -44,21 +39,10 @@ public class Server {
 
     public void connection(Socket socket) {
         try (
-                final var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                final var in = new BufferedInputStream(socket.getInputStream());
                 final var out = new BufferedOutputStream(socket.getOutputStream())) {
-            final var requestLine = in.readLine();
-            final var parts = requestLine.split(" ");
 
-            if (parts.length != 3) {
-                socket.close();
-            }
-
-            String method = parts[0];
-            final String path = parts[1];
-            List<String> headers = List.of();
-            List<NameValuePair> parameters = List.of();
-
-            Request request = new Request(method, path, headers, parameters);
+            Request request = Request.request(in);
 
             if (request == null || !handlers.containsKey(request.getMethod())) {
                 response(out, "404", "Not found");
@@ -70,13 +54,13 @@ public class Server {
                 Handler handler = handlerMap.get(requestPath);
                 handler.handle(request, out);
             } else {
-                if (!validPaths.contains(request.getPath())) {
+                if (!paths.contains(request.getPath())) {
                     response(out, "404", "Not found");
                 } else {
-                    defaultHandler(out, path);
+                    defaultHandler(out, requestPath);
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
